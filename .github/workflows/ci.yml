@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Lint with ruff
+      run: |
+        ruff check src/ tests/ scripts/ demo/
+    
+    - name: Format check with black
+      run: |
+        black --check src/ tests/ scripts/ demo/
+    
+    - name: Test with pytest
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test model initialization
+      run: |
+        python -c "
+        from src.models.video_gan import VideoGenerator, VideoDiscriminator
+        from src.data import get_dataset
+        from src.utils import set_seed, get_device
+        
+        set_seed(42)
+        device = get_device('cpu')
+        
+        # Test model initialization
+        generator = VideoGenerator(z_dim=100, num_frames=16, img_size=64)
+        discriminator = VideoDiscriminator(img_channels=3, img_size=64, num_frames=16)
+        
+        # Test dataset loading
+        dataset = get_dataset('moving_mnist', num_frames=16, img_size=64, num_samples=10)
+        
+        print('All tests passed!')
+        "
